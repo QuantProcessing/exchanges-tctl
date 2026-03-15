@@ -186,6 +186,14 @@ func runInteractive(exchangeFlag, market string, jsonOut, useWS bool, logger *za
 			continue
 		}
 
+		// fund-arb is special: creates its own spot+perp adapters
+		if cmd == "fund-arb" || cmd == "fa" {
+			if err := cmdFundArb(state.ctx, state.exchName, parts[1:], state.jsonOut, state.logger); err != nil {
+				outputError("%v", err)
+			}
+			continue
+		}
+
 		if err := dispatch(state.ctx, state.adp, state.exchName, cmd, parts[1:], state.jsonOut); err != nil {
 			outputError("%v", err)
 		}

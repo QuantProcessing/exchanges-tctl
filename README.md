@@ -85,6 +85,21 @@ tctl positions --json
 | `--reduce-only` | Reduce only |
 | `--client-id ID` | Custom order ID |
 
+### Arbitrage
+
+| Command | Alias | Description |
+|---------|-------|-------------|
+| `fund-arb <symbol> <qty> [flags]` | `fa` | Funding rate arb (buy spot + short perp) |
+
+**Fund-arb flags:**
+
+| Flag | Description |
+|------|-------------|
+| `--leverage N` | Perp leverage (default: 1) |
+| `--close` | Close mode (sell spot + buy perp) |
+| `--spot-price P` | Spot limit price (market if omitted) |
+| `--perp-price P` | Perp limit price (market if omitted) |
+
 ### Account
 
 | Command | Alias | Description |

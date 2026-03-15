@@ -60,6 +60,10 @@ Trading:
 
   Order flags: --price P --tif GTC|IOC|FOK|PO --post-only --reduce-only --client-id ID
 
+Arbitrage:
+  fund-arb <symbol> <qty> [flags]          funding rate arb (buy spot + short perp)
+  Fund-arb flags: --leverage N --close --spot-price P --perp-price P
+
 Account:
   positions                                list positions (perp only)
   orders [symbol]                          list open orders
@@ -79,6 +83,7 @@ Aliases:
   t=ticker  ob=orderbook  kl=klines  p=positions  o=orders
   b=balance  acc=account  sb=spot-balances  lev=leverage
   wt=watch-ticker  wob=watch-ob  wo=watch-orders  wtr=watch-trades
+  fa=fund-arb
 
 Examples:
   tctl ticker BTC
@@ -89,6 +94,8 @@ Examples:
   tctl order order-123 BTC
   tctl -ws watch-ticker ETH
   tctl positions --json
+  tctl fund-arb BTC 0.01 --leverage 5
+  tctl fund-arb BTC 0.01 --close
 `)
 	}
 
@@ -142,6 +149,14 @@ Examples:
 	// Dispatch command
 	cmd := strings.ToLower(args[0])
 	cmdArgs := args[1:]
+
+	// fund-arb is special: it creates its own spot+perp adapters internally
+	if cmd == "fund-arb" || cmd == "fa" {
+		if err := cmdFundArb(ctx, exchName, cmdArgs, *jsonOut, logger); err != nil {
+			fatal(*jsonOut, "%v", err)
+		}
+		return
+	}
 
 	if err := dispatch(ctx, adp, exchName, cmd, cmdArgs, *jsonOut); err != nil {
 		fatal(*jsonOut, "%v", err)
