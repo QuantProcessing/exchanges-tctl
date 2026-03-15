@@ -1,13 +1,16 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
+
+	"github.com/chzyer/readline"
 
 	exchanges "github.com/QuantProcessing/exchanges"
 	"go.uber.org/zap"
@@ -49,6 +52,15 @@ func (s *interactiveState) reconnect() error {
 	return err
 }
 
+// historyPath returns the path to the command history file.
+func historyPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".tctl_history")
+}
+
 func runInteractive(exchangeFlag, market string, jsonOut, useWS bool, logger *zap.SugaredLogger) {
 	exchName := resolveExchange(exchangeFlag)
 	if exchName == "" {
@@ -59,10 +71,18 @@ func runInteractive(exchangeFlag, market string, jsonOut, useWS bool, logger *za
 		}
 		fmt.Printf("Available exchanges: %s\n", colorCyan(strings.Join(configured, ", ")))
 		fmt.Print("Select exchange: ")
-		scanner := bufio.NewScanner(os.Stdin)
-		if scanner.Scan() {
-			exchName = strings.ToUpper(strings.TrimSpace(scanner.Text()))
+
+		// Use a simple readline for exchange selection
+		rl, err := readline.New("> ")
+		if err != nil {
+			return
 		}
+		line, err := rl.Readline()
+		rl.Close()
+		if err != nil {
+			return
+		}
+		exchName = strings.ToUpper(strings.TrimSpace(line))
 		if exchName == "" {
 			return
 		}
@@ -91,18 +111,37 @@ func runInteractive(exchangeFlag, market string, jsonOut, useWS bool, logger *za
 		fatal(jsonOut, "failed to create %s adapter: %v", exchName, err)
 	}
 
-	scanner := bufio.NewScanner(os.Stdin)
+	// Create readline instance with history
+	rl, err := readline.NewEx(&readline.Config{
+		Prompt:          state.prompt(),
+		HistoryFile:     historyPath(),
+		InterruptPrompt: "^C",
+		EOFPrompt:       "exit",
+	})
+	if err != nil {
+		// Fallback: if readline fails, we can't do interactive mode
+		fatal(jsonOut, "failed to initialize readline: %v", err)
+	}
+	defer rl.Close()
 
 	fmt.Printf("Connected to %s (%s). Type %s for commands, %s to quit.\n",
 		colorBold(exchName), market, colorCyan("help"), colorCyan("exit"))
 
 	for {
-		fmt.Print(state.prompt())
-		if !scanner.Scan() {
+		rl.SetPrompt(state.prompt())
+		line, err := rl.Readline()
+		if err != nil {
+			if err == readline.ErrInterrupt {
+				continue // Ctrl-C: clear line, don't exit
+			}
+			if err == io.EOF {
+				fmt.Println("Bye!")
+				return
+			}
 			break
 		}
 
-		line := strings.TrimSpace(scanner.Text())
+		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
@@ -199,6 +238,7 @@ func runInteractive(exchangeFlag, market string, jsonOut, useWS bool, logger *za
 		}
 	}
 }
+
 
 func printStatus(s *interactiveState) {
 	mode := "REST"
