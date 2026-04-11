@@ -190,7 +190,7 @@ func cmdFetchOrder(ctx context.Context, adp exchanges.Exchange, args []string, j
 	orderID := args[0]
 	symbol := args[1]
 
-	order, err := adp.FetchOrder(ctx, orderID, symbol)
+	order, err := adp.FetchOrderByID(ctx, orderID, symbol)
 	if err != nil {
 		return fmt.Errorf("fetch order: %w", err)
 	}
@@ -207,7 +207,7 @@ func cmdFetchOrder(ctx context.Context, adp exchanges.Exchange, args []string, j
 			order.Symbol,
 			colorSide(string(order.Side)),
 			string(order.Type),
-			priceStr(order.Price),
+			priceStr(displayOrderPrice(order)),
 			decStr(order.Quantity),
 			decStr(order.FilledQuantity),
 			colorStatus(string(order.Status)),
@@ -221,4 +221,20 @@ func priceStr(p decimal.Decimal) string {
 		return "-"
 	}
 	return p.String()
+}
+
+func displayOrderPrice(order *exchanges.Order) decimal.Decimal {
+	if order == nil {
+		return decimal.Zero
+	}
+	switch {
+	case !order.OrderPrice.IsZero():
+		return order.OrderPrice
+	case !order.AverageFillPrice.IsZero():
+		return order.AverageFillPrice
+	case !order.LastFillPrice.IsZero():
+		return order.LastFillPrice
+	default:
+		return order.Price
+	}
 }

@@ -126,18 +126,11 @@ func createAdapter(ctx context.Context, name string, marketType exchanges.Market
 	}
 }
 
-// createRESTAdapter creates an adapter with REST-only order mode.
+// createRESTAdapter is kept for CLI compatibility.
+// Since exchanges v0.2.13 removed the shared OrderMode toggle, the adapter's
+// unsuffixed write methods are already its primary non-WS write path.
 func createRESTAdapter(ctx context.Context, name string, marketType exchanges.MarketType, logger *zap.SugaredLogger) (exchanges.Exchange, error) {
-	adp, err := createAdapter(ctx, name, marketType, logger)
-	if err != nil {
-		return nil, err
-	}
-	// Set REST mode if supported
-	type moder interface{ SetOrderMode(exchanges.OrderMode) }
-	if m, ok := adp.(moder); ok {
-		m.SetOrderMode(exchanges.OrderModeREST)
-	}
-	return adp, nil
+	return createAdapter(ctx, name, marketType, logger)
 }
 
 // credentialChecks maps exchange names to the env key that indicates the exchange is configured.
@@ -178,4 +171,3 @@ func resolveExchange(explicit string) string {
 	}
 	return ""
 }
-

@@ -77,7 +77,7 @@ func cmdWatchOrderBook(ctx context.Context, adp exchanges.Exchange, args []strin
 
 	fmt.Printf("Watching orderbook for %s (depth=%d, Ctrl+C to stop)...\n", symbol, depth)
 
-	err := adp.WatchOrderBook(ctx, symbol, func(ob *exchanges.OrderBook) {
+	err := adp.WatchOrderBook(ctx, symbol, depth, func(ob *exchanges.OrderBook) {
 		if jsonOut {
 			trimmed := trimOrderBook(ob, depth)
 			outputJSON(trimmed)
@@ -112,7 +112,7 @@ func cmdWatchOrders(ctx context.Context, adp exchanges.Exchange, args []string, 
 			sideColor(string(o.Side)),
 			o.Symbol,
 			string(o.Type),
-			priceStr(o.Price),
+			priceStr(displayOrderPrice(o)),
 			decStr(o.Quantity),
 			decStr(o.FilledQuantity),
 			colorStatus(string(o.Status)),

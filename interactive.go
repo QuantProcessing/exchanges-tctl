@@ -239,7 +239,6 @@ func runInteractive(exchangeFlag, market string, jsonOut, useWS bool, logger *za
 	}
 }
 
-
 func printStatus(s *interactiveState) {
 	mode := "REST"
 	if s.useWS {
@@ -276,6 +275,7 @@ func printInteractiveHelp() {
 	fmt.Println(colorBold("Arbitrage:"))
 	fmt.Println("  fund-arb <symbol> <qty> [flags] (fa)  funding rate arb (spot+perp)")
 	fmt.Println("  Flags: --leverage N --close --spot-price P --perp-price P")
+	fmt.Println("         --spot-exchange EX --perp-exchange EX")
 	fmt.Println()
 	fmt.Println(colorBold("Account:"))
 	fmt.Println("  positions                     (p)    list positions (perp)")
@@ -295,7 +295,7 @@ func printInteractiveHelp() {
 	fmt.Println(colorBold("Session:"))
 	fmt.Println("  use <exchange>                       switch exchange")
 	fmt.Println("  market perp|spot                     switch market type")
-	fmt.Println("  mode rest|ws                         switch transport mode")
+	fmt.Println("  mode rest|ws                         switch session mode")
 	fmt.Println("  status                               show session info")
 	fmt.Println("  json                                 toggle JSON output")
 	fmt.Println("  help                          (h,?)  show this help")

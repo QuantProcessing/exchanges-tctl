@@ -13,11 +13,11 @@ import (
 )
 
 // cmdFundArb implements the funding rate arbitrage command.
-// It creates both a spot and perp adapter for the same exchange,
-// then places opposing orders simultaneously (buy spot + sell perp for open,
-// sell spot + buy perp for close).
-func cmdFundArb(ctx context.Context, exchName string, args []string, jsonOut bool, logger *zap.SugaredLogger) error {
-	if err := requireArgs(args, 2, "fund-arb <symbol> <quantity> [--leverage N] [--close] [--spot-price P] [--perp-price P]"); err != nil {
+// By default it creates both a spot and perp adapter for the same exchange.
+// When both --spot-exchange and --perp-exchange are provided, each leg can use
+// a different exchange while still sharing the same symbol and quantity.
+func cmdFundArb(ctx context.Context, defaultExchange string, args []string, jsonOut bool, logger *zap.SugaredLogger) error {
+	if err := requireArgs(args, 2, "fund-arb <symbol> <quantity> [--leverage N] [--close] [--spot-price P] [--perp-price P] [--spot-exchange EX] [--perp-exchange EX]"); err != nil {
 		return err
 	}
 
@@ -32,7 +32,14 @@ func cmdFundArb(ctx context.Context, exchName string, args []string, jsonOut boo
 	closeMode, remaining := parseBool(remaining, "--close")
 	spotPrice, remaining := parseNamedPrice(remaining, "--spot-price")
 	perpPrice, remaining := parseNamedPrice(remaining, "--perp-price")
+	spotExchange, remaining := parseStringFlag(remaining, "--spot-exchange")
+	perpExchange, remaining := parseStringFlag(remaining, "--perp-exchange")
 	leverageStr, _ := parseStringFlag(remaining, "--leverage")
+
+	spotExchange, perpExchange, err = resolveFundArbExchanges(defaultExchange, spotExchange, perpExchange)
+	if err != nil {
+		return err
+	}
 
 	leverage := 1
 	if leverageStr != "" {
@@ -44,11 +51,11 @@ func cmdFundArb(ctx context.Context, exchName string, args []string, jsonOut boo
 	}
 
 	// Create both adapters
-	spotAdp, err := createRESTAdapter(ctx, exchName, exchanges.MarketTypeSpot, logger)
+	spotAdp, err := createRESTAdapter(ctx, spotExchange, exchanges.MarketTypeSpot, logger)
 	if err != nil {
 		return fmt.Errorf("failed to create spot adapter: %w", err)
 	}
-	perpAdp, err := createRESTAdapter(ctx, exchName, exchanges.MarketTypePerp, logger)
+	perpAdp, err := createRESTAdapter(ctx, perpExchange, exchanges.MarketTypePerp, logger)
 	if err != nil {
 		return fmt.Errorf("failed to create perp adapter: %w", err)
 	}
@@ -83,7 +90,7 @@ func cmdFundArb(ctx context.Context, exchName string, args []string, jsonOut boo
 				return fmt.Errorf("failed to set leverage: %w", err)
 			}
 		} else {
-			return fmt.Errorf("%s does not support leverage setting", exchName)
+			return fmt.Errorf("%s does not support leverage setting", perpExchange)
 		}
 	}
 
@@ -119,7 +126,11 @@ func cmdFundArb(ctx context.Context, exchName string, args []string, jsonOut boo
 		if closeMode {
 			action = "Closing"
 		}
-		outputInfo("%s funding arb: %s %s × %s", action, symbol, qty.String(), exchName)
+		if spotExchange == perpExchange {
+			outputInfo("%s funding arb: %s %s × %s", action, symbol, qty.String(), spotExchange)
+		} else {
+			outputInfo("%s funding arb: %s %s × spot=%s perp=%s", action, symbol, qty.String(), spotExchange, perpExchange)
+		}
 	}
 
 	var (
@@ -141,9 +152,27 @@ func cmdFundArb(ctx context.Context, exchName string, args []string, jsonOut boo
 
 	// Output results
 	if jsonOut {
-		return outputFundArbJSON(spotOrder, spotErr, perpOrder, perpErr)
+		return outputFundArbJSON(spotExchange, spotOrder, spotErr, perpExchange, perpOrder, perpErr)
 	}
-	return outputFundArbTable(spotOrder, spotErr, perpOrder, perpErr, closeMode)
+	return outputFundArbTable(spotExchange, spotOrder, spotErr, perpExchange, perpOrder, perpErr, closeMode)
+}
+
+func resolveFundArbExchanges(defaultExchange, spotExchange, perpExchange string) (string, string, error) {
+	spotExchange = strings.ToUpper(strings.TrimSpace(spotExchange))
+	perpExchange = strings.ToUpper(strings.TrimSpace(perpExchange))
+
+	if (spotExchange == "") != (perpExchange == "") {
+		return "", "", fmt.Errorf("must set both --spot-exchange and --perp-exchange")
+	}
+	if spotExchange != "" {
+		return spotExchange, perpExchange, nil
+	}
+
+	resolved := resolveExchange(defaultExchange)
+	if resolved == "" {
+		return "", "", fmt.Errorf("no exchange specified and none auto-detected. Use -e flag or set both --spot-exchange and --perp-exchange")
+	}
+	return resolved, resolved, nil
 }
 
 // parseNamedPrice extracts a named price flag (e.g., --spot-price 95000).
@@ -163,21 +192,22 @@ func parseNamedPrice(args []string, flag string) (decimal.Decimal, []string) {
 }
 
 // outputFundArbJSON outputs both orders as JSON.
-func outputFundArbJSON(spotOrder *exchanges.Order, spotErr error, perpOrder *exchanges.Order, perpErr error) error {
+func outputFundArbJSON(spotExchange string, spotOrder *exchanges.Order, spotErr error, perpExchange string, perpOrder *exchanges.Order, perpErr error) error {
 	type orderResult struct {
-		Market string           `json:"market"`
-		Order  *exchanges.Order `json:"order,omitempty"`
-		Error  string           `json:"error,omitempty"`
+		Market   string           `json:"market"`
+		Exchange string           `json:"exchange"`
+		Order    *exchanges.Order `json:"order,omitempty"`
+		Error    string           `json:"error,omitempty"`
 	}
 
 	results := make([]orderResult, 2)
-	results[0] = orderResult{Market: "spot"}
+	results[0] = orderResult{Market: "spot", Exchange: spotExchange}
 	if spotErr != nil {
 		results[0].Error = spotErr.Error()
 	} else {
 		results[0].Order = spotOrder
 	}
-	results[1] = orderResult{Market: "perp"}
+	results[1] = orderResult{Market: "perp", Exchange: perpExchange}
 	if perpErr != nil {
 		results[1].Error = perpErr.Error()
 	} else {
@@ -193,7 +223,7 @@ func outputFundArbJSON(spotOrder *exchanges.Order, spotErr error, perpOrder *exc
 }
 
 // outputFundArbTable outputs both orders as a formatted table.
-func outputFundArbTable(spotOrder *exchanges.Order, spotErr error, perpOrder *exchanges.Order, perpErr error, closeMode bool) error {
+func outputFundArbTable(spotExchange string, spotOrder *exchanges.Order, spotErr error, perpExchange string, perpOrder *exchanges.Order, perpErr error, closeMode bool) error {
 	action := "OPEN"
 	if closeMode {
 		action = "CLOSE"
@@ -205,26 +235,28 @@ func outputFundArbTable(spotOrder *exchanges.Order, spotErr error, perpOrder *ex
 
 	// Spot result
 	if spotErr != nil {
-		outputError("SPOT  ✗ %v", spotErr)
+		outputError("SPOT  (%s) ✗ %v", spotExchange, spotErr)
 	} else {
-		fmt.Printf("  SPOT  ✓ %s %s %s @ %s  [%s]\n",
+		fmt.Printf("  SPOT  (%s) ✓ %s %s %s @ %s  [%s]\n",
+			spotExchange,
 			colorSide(string(spotOrder.Side)),
 			spotOrder.Symbol,
 			decStr(spotOrder.Quantity),
-			priceStr(spotOrder.Price),
+			priceStr(displayOrderPrice(spotOrder)),
 			spotOrder.OrderID,
 		)
 	}
 
 	// Perp result
 	if perpErr != nil {
-		outputError("PERP  ✗ %v", perpErr)
+		outputError("PERP  (%s) ✗ %v", perpExchange, perpErr)
 	} else {
-		fmt.Printf("  PERP  ✓ %s %s %s @ %s  [%s]\n",
+		fmt.Printf("  PERP  (%s) ✓ %s %s %s @ %s  [%s]\n",
+			perpExchange,
 			colorSide(string(perpOrder.Side)),
 			perpOrder.Symbol,
 			decStr(perpOrder.Quantity),
-			priceStr(perpOrder.Price),
+			priceStr(displayOrderPrice(perpOrder)),
 			perpOrder.OrderID,
 		)
 	}

@@ -25,7 +25,7 @@ func main() {
 	exchange := flag.String("e", "", "exchange name (e.g. BINANCE, OKX). Auto-detected if only one is configured.")
 	market := flag.String("m", "perp", "market type: perp | spot")
 	jsonOut := flag.Bool("json", false, "output as JSON (for AI agents)")
-	useWS := flag.Bool("ws", false, "use WebSocket for order operations (default: REST)")
+	useWS := flag.Bool("ws", false, "compatibility flag for watch/WebSocket-centric workflows")
 	showVersion := flag.Bool("version", false, "show version")
 
 	flag.Usage = func() {
@@ -38,7 +38,7 @@ Global Flags:
   -e string     exchange name (auto-detected if only one configured)
   -m string     market type: perp | spot (default "perp")
   -json         output as JSON
-  -ws           use WebSocket for order operations
+  -ws           compatibility flag for watch/WebSocket-centric workflows
   -version      show version
 
 Market Data:
@@ -63,6 +63,7 @@ Trading:
 Arbitrage:
   fund-arb <symbol> <qty> [flags]          funding rate arb (buy spot + short perp)
   Fund-arb flags: --leverage N --close --spot-price P --perp-price P
+                  [--spot-exchange EX --perp-exchange EX]
 
 Account:
   positions                                list positions (perp only)
@@ -96,6 +97,7 @@ Examples:
   tctl positions --json
   tctl fund-arb BTC 0.01 --leverage 5
   tctl fund-arb BTC 0.01 --close
+  tctl fund-arb BTC 0.01 --spot-exchange BINANCE --perp-exchange OKX
 `)
 	}
 
@@ -122,6 +124,18 @@ Examples:
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
+	cmd := strings.ToLower(args[0])
+	cmdArgs := args[1:]
+
+	// fund-arb is special: it creates its own spot+perp adapters internally
+	// and can resolve exchanges per leg, so handle it before global exchange setup.
+	if cmd == "fund-arb" || cmd == "fa" {
+		if err := cmdFundArb(ctx, *exchange, cmdArgs, *jsonOut, logger); err != nil {
+			fatal(*jsonOut, "%v", err)
+		}
+		return
+	}
+
 	// Auto-detect exchange
 	exchName := resolveExchange(*exchange)
 	if exchName == "" {
@@ -144,18 +158,6 @@ Examples:
 	}
 	if err != nil {
 		fatal(*jsonOut, "failed to create %s adapter: %v", exchName, err)
-	}
-
-	// Dispatch command
-	cmd := strings.ToLower(args[0])
-	cmdArgs := args[1:]
-
-	// fund-arb is special: it creates its own spot+perp adapters internally
-	if cmd == "fund-arb" || cmd == "fa" {
-		if err := cmdFundArb(ctx, exchName, cmdArgs, *jsonOut, logger); err != nil {
-			fatal(*jsonOut, "%v", err)
-		}
-		return
 	}
 
 	if err := dispatch(ctx, adp, exchName, cmd, cmdArgs, *jsonOut); err != nil {

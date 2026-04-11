@@ -72,7 +72,7 @@ func cmdOpenOrders(ctx context.Context, adp exchanges.Exchange, args []string, j
 			o.Symbol,
 			colorSide(string(o.Side)),
 			string(o.Type),
-			decStr(o.Price),
+			priceStr(displayOrderPrice(&o)),
 			decStr(o.Quantity),
 			colorStatus(string(o.Status)),
 		})

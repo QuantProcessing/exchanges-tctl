@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-支持 Perp 和 Spot 市场、REST/WebSocket 双模式、交互式 REPL 的交易所命令行控制工具。
+支持 Perp 和 Spot 市场、实时流式订阅、交互式 REPL 的交易所命令行控制工具。
 
 ## 安装
 
@@ -47,7 +47,7 @@ tctl positions --json
 | `-e` | 交易所名称 | 自动检测 |
 | `-m` | 市场类型: `perp \| spot` | `perp` |
 | `-json` | JSON 输出（AI agent 友好） | `false` |
-| `-ws` | 使用 WebSocket | `false`（REST） |
+| `-ws` | 面向 watch/WebSocket 场景的兼容参数 | `false` |
 | `-version` | 显示版本 | - |
 
 ## 命令列表
@@ -99,6 +99,18 @@ tctl positions --json
 | `--close` | 平仓模式（卖现货 + 平空） |
 | `--spot-price P` | 现货限价（不指定则市价） |
 | `--perp-price P` | 合约限价（不指定则市价） |
+| `--spot-exchange EX` | 现货腿交易所（必须和 `--perp-exchange` 成对出现） |
+| `--perp-exchange EX` | 合约腿交易所（必须和 `--spot-exchange` 成对出现） |
+
+示例：
+
+```bash
+# 同交易所套利（兼容旧行为）
+tctl -e BINANCE fund-arb BTC 0.01 --leverage 5
+
+# 跨交易所套利
+tctl fund-arb BTC 0.01 --spot-exchange BINANCE --perp-exchange OKX
+```
 
 ### 账户
 
@@ -123,7 +135,7 @@ tctl positions --json
 
 ## 交互模式
 
-不带命令运行进入 REPL，支持动态切换交易所/市场/传输模式：
+不带命令运行进入 REPL，支持动态切换交易所/市场/会话模式：
 
 ```bash
 $ tctl -e BINANCE
@@ -147,7 +159,7 @@ OKX/spot(ws)> exit
 |------|------|
 | `use <exchange>` | 切换交易所 |
 | `market perp\|spot` | 切换市场类型 |
-| `mode rest\|ws` | 切换传输模式 |
+| `mode rest\|ws` | 切换会话模式 |
 | `status` | 显示当前会话信息 |
 | `help` | 帮助 |
 | `exit` | 退出 |
@@ -186,9 +198,11 @@ go build -o tctl .
 EXCHANGES_BINANCE_API_KEY=xxx
 EXCHANGES_BINANCE_SECRET_KEY=xxx
 EXCHANGES_OKX_API_KEY=xxx
-# 可选：指定报价币种（默认 CEX=USDT, DEX=USDC）
+# 可选：指定报价币种（各交易所默认值不同，详见 .env.example）
 # EXCHANGES_BINANCE_QUOTE_CURRENCY=USDC
 ```
+
+从 `github.com/QuantProcessing/exchanges v0.2.13` 开始，上游已经移除了共享的 `OrderMode` 切换。`tctl` 仍保留 `-ws` 和 `mode ws` 作为兼容入口，主要服务 watch 类工作流；常规下单/撤单/改单命令会走适配器默认的主写入路径。
 
 支持的交易所：Binance, OKX, Aster, Nado, Lighter, Hyperliquid, StandX, EdgeX, GRVT。
 

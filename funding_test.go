@@ -28,11 +28,11 @@ type setLeverageCall struct {
 	leverage int
 }
 
-func (m *spotPerpMock) GetExchange() string               { return m.exchange }
+func (m *spotPerpMock) GetExchange() string                 { return m.exchange }
 func (m *spotPerpMock) GetMarketType() exchanges.MarketType { return m.marketType }
-func (m *spotPerpMock) FormatSymbol(s string) string      { return s }
-func (m *spotPerpMock) ExtractSymbol(s string) string     { return s }
-func (m *spotPerpMock) Close() error                      { return nil }
+func (m *spotPerpMock) FormatSymbol(s string) string        { return s }
+func (m *spotPerpMock) ExtractSymbol(s string) string       { return s }
+func (m *spotPerpMock) Close() error                        { return nil }
 
 func (m *spotPerpMock) PlaceOrder(ctx context.Context, params *exchanges.OrderParams) (*exchanges.Order, error) {
 	if m.failSpot && m.marketType == exchanges.MarketTypeSpot {
@@ -136,6 +136,56 @@ func TestFundArbInvalidLeverage(t *testing.T) {
 	}
 }
 
+func TestFundArbCrossExchangeRequiresBothFlags(t *testing.T) {
+	err := cmdFundArb(context.Background(), "MOCK", []string{"BTC", "0.01", "--spot-exchange", "BINANCE"}, false, nil)
+	if err == nil {
+		t.Error("expected error when only one cross-exchange flag is set")
+	}
+	if !strings.Contains(err.Error(), "must set both --spot-exchange and --perp-exchange") {
+		t.Errorf("expected paired-flag validation error, got: %v", err)
+	}
+}
+
+func TestFundArbCrossExchangeUsesExplicitLegExchanges(t *testing.T) {
+	err := cmdFundArb(context.Background(), "", []string{"BTC", "0.01", "--spot-exchange", "SPOTX", "--perp-exchange", "PERPX"}, false, nil)
+	if err == nil {
+		t.Error("expected error for unsupported spot exchange")
+	}
+	if !strings.Contains(err.Error(), "unsupported exchange: SPOTX") {
+		t.Errorf("expected spot leg exchange to be used, got: %v", err)
+	}
+}
+
+func TestFundArbWithoutCrossFlagsRequiresResolvableDefaultExchange(t *testing.T) {
+	err := cmdFundArb(context.Background(), "", []string{"BTC", "0.01"}, false, nil)
+	if err == nil {
+		t.Error("expected error when no default exchange can be resolved")
+	}
+	if !strings.Contains(err.Error(), "no exchange specified and none auto-detected") {
+		t.Errorf("expected missing-default-exchange error, got: %v", err)
+	}
+}
+
+func TestResolveFundArbExchangesDefaultsToSingleExchange(t *testing.T) {
+	spotExchange, perpExchange, err := resolveFundArbExchanges("binance", "", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if spotExchange != "BINANCE" || perpExchange != "BINANCE" {
+		t.Fatalf("got spot=%q perp=%q, want BINANCE/BINANCE", spotExchange, perpExchange)
+	}
+}
+
+func TestResolveFundArbExchangesUsesExplicitLegs(t *testing.T) {
+	spotExchange, perpExchange, err := resolveFundArbExchanges("binance", "okx", "bybit")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if spotExchange != "OKX" || perpExchange != "BYBIT" {
+		t.Fatalf("got spot=%q perp=%q, want OKX/BYBIT", spotExchange, perpExchange)
+	}
+}
+
 func TestOutputFundArbTable(t *testing.T) {
 	spotOrder := &exchanges.Order{
 		OrderID:  "spot-123",
@@ -153,7 +203,7 @@ func TestOutputFundArbTable(t *testing.T) {
 	}
 
 	output := captureOutput(func() {
-		err := outputFundArbTable(spotOrder, nil, perpOrder, nil, false)
+		err := outputFundArbTable("BINANCE", spotOrder, nil, "OKX", perpOrder, nil, false)
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
@@ -167,6 +217,9 @@ func TestOutputFundArbTable(t *testing.T) {
 	}
 	if !strings.Contains(output, "perp-456") {
 		t.Error("expected perp order ID in output")
+	}
+	if !strings.Contains(output, "BINANCE") || !strings.Contains(output, "OKX") {
+		t.Error("expected exchange names in output")
 	}
 }
 
@@ -185,7 +238,7 @@ func TestOutputFundArbTableClose(t *testing.T) {
 	}
 
 	output := captureOutput(func() {
-		err := outputFundArbTable(spotOrder, nil, perpOrder, nil, true)
+		err := outputFundArbTable("BINANCE", spotOrder, nil, "BINANCE", perpOrder, nil, true)
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
@@ -207,7 +260,7 @@ func TestOutputFundArbPartialFailure(t *testing.T) {
 
 	var err error
 	captureOutput(func() {
-		err = outputFundArbTable(spotOrder, nil, nil, perpErr, false)
+		err = outputFundArbTable("BINANCE", spotOrder, nil, "OKX", nil, perpErr, false)
 	})
 
 	if err == nil {
@@ -224,7 +277,7 @@ func TestOutputFundArbBothFailed(t *testing.T) {
 
 	var err error
 	captureOutput(func() {
-		err = outputFundArbTable(nil, spotErr, nil, perpErr, false)
+		err = outputFundArbTable("BINANCE", nil, spotErr, "OKX", nil, perpErr, false)
 	})
 
 	if err == nil {
@@ -248,7 +301,7 @@ func TestOutputFundArbJSON(t *testing.T) {
 	}
 
 	output := captureOutput(func() {
-		err := outputFundArbJSON(spotOrder, nil, perpOrder, nil)
+		err := outputFundArbJSON("BINANCE", spotOrder, nil, "OKX", perpOrder, nil)
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
@@ -263,6 +316,9 @@ func TestOutputFundArbJSON(t *testing.T) {
 	if !strings.Contains(output, `"market": "spot"`) {
 		t.Error("expected market:spot in JSON output")
 	}
+	if !strings.Contains(output, `"exchange": "BINANCE"`) || !strings.Contains(output, `"exchange": "OKX"`) {
+		t.Error("expected exchange names in JSON output")
+	}
 }
 
 func TestOutputFundArbJSONPartialFail(t *testing.T) {
@@ -273,7 +329,7 @@ func TestOutputFundArbJSONPartialFail(t *testing.T) {
 	spotErr := fmt.Errorf("no balance")
 
 	output := captureOutput(func() {
-		_ = outputFundArbJSON(nil, spotErr, perpOrder, nil)
+		_ = outputFundArbJSON("BINANCE", nil, spotErr, "OKX", perpOrder, nil)
 	})
 
 	if !strings.Contains(output, "no balance") {

@@ -198,8 +198,8 @@ func TestCmdFetchOrder(t *testing.T) {
 		}
 	})
 
-	if mock.lastMethod != "FetchOrder" {
-		t.Errorf("expected FetchOrder, got %s", mock.lastMethod)
+	if mock.lastMethod != "FetchOrderByID" {
+		t.Errorf("expected FetchOrderByID, got %s", mock.lastMethod)
 	}
 	if !strings.Contains(output, "order-123") {
 		t.Error("output should contain order ID")

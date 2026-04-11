@@ -2,7 +2,7 @@
 
 [中文文档](README_CN.md)
 
-A command-line tool for managing cryptocurrency exchanges. Supports Perp & Spot markets, REST/WebSocket dual-mode transport, and an interactive REPL.
+A command-line tool for managing cryptocurrency exchanges. Supports Perp & Spot markets, real-time streaming, and an interactive REPL.
 
 ## Install
 
@@ -47,7 +47,7 @@ tctl positions --json
 | `-e` | Exchange name | Auto-detect |
 | `-m` | Market type: `perp \| spot` | `perp` |
 | `-json` | JSON output (AI agent friendly) | `false` |
-| `-ws` | Use WebSocket transport | `false` (REST) |
+| `-ws` | Compatibility flag for watch/WebSocket-centric workflows | `false` |
 | `-version` | Show version | - |
 
 ## Commands
@@ -99,6 +99,18 @@ tctl positions --json
 | `--close` | Close mode (sell spot + buy perp) |
 | `--spot-price P` | Spot limit price (market if omitted) |
 | `--perp-price P` | Perp limit price (market if omitted) |
+| `--spot-exchange EX` | Spot leg exchange (must be paired with `--perp-exchange`) |
+| `--perp-exchange EX` | Perp leg exchange (must be paired with `--spot-exchange`) |
+
+Examples:
+
+```bash
+# Same-exchange arb (legacy behavior)
+tctl -e BINANCE fund-arb BTC 0.01 --leverage 5
+
+# Cross-exchange arb
+tctl fund-arb BTC 0.01 --spot-exchange BINANCE --perp-exchange OKX
+```
 
 ### Account
 
@@ -123,7 +135,7 @@ tctl positions --json
 
 ## Interactive Mode
 
-Run without a command to enter REPL mode with dynamic exchange/market/transport switching:
+Run without a command to enter REPL mode with dynamic exchange/market/session-mode switching:
 
 ```bash
 $ tctl -e BINANCE
@@ -147,7 +159,7 @@ OKX/spot(ws)> exit
 |---------|-------------|
 | `use <exchange>` | Switch exchange |
 | `market perp\|spot` | Switch market type |
-| `mode rest\|ws` | Switch transport mode |
+| `mode rest\|ws` | Switch session mode |
 | `status` | Show session info |
 | `help` | Show help |
 | `exit` | Quit |
@@ -186,9 +198,11 @@ Configure exchange credentials via `.env` file or environment variables:
 EXCHANGES_BINANCE_API_KEY=xxx
 EXCHANGES_BINANCE_SECRET_KEY=xxx
 EXCHANGES_OKX_API_KEY=xxx
-# Optional: specify quote currency (default: CEX=USDT, DEX=USDC)
+# Optional: specify quote currency (exchange defaults vary; see .env.example)
 # EXCHANGES_BINANCE_QUOTE_CURRENCY=USDC
 ```
+
+With `github.com/QuantProcessing/exchanges` `v0.2.13+`, order transport is no longer selected through a shared `OrderMode` toggle. `tctl` still accepts `-ws` and `mode ws` for compatibility with watch-oriented workflows, but standard order commands (`buy`, `sell`, `cancel`, `modify`) follow the adapter's primary non-WS write path.
 
 Supported exchanges: Binance, OKX, Aster, Nado, Lighter, Hyperliquid, StandX, EdgeX, GRVT.
 

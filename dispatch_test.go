@@ -19,9 +19,9 @@ import (
 
 type fullMockAdapter struct {
 	exchanges.Exchange // embed to satisfy interface
-	lastMethod       string
-	marketType       exchanges.MarketType
-	exchange         string
+	lastMethod         string
+	marketType         exchanges.MarketType
+	exchange           string
 
 	// Configurable return data
 	returnError bool
@@ -39,13 +39,13 @@ func newSpotMock() *fullMockAdapter {
 // (not PerpExchange or SpotExchange). Used to test perp/spot-only command errors.
 type mockExchange struct {
 	exchanges.Exchange // embed to satisfy interface
-	lastMethod       string
+	lastMethod         string
 }
 
-func (m *mockExchange) GetExchange() string               { return "MOCK" }
+func (m *mockExchange) GetExchange() string                 { return "MOCK" }
 func (m *mockExchange) GetMarketType() exchanges.MarketType { return exchanges.MarketTypePerp }
-func (m *mockExchange) FormatSymbol(s string) string      { return s }
-func (m *mockExchange) ExtractSymbol(s string) string     { return s }
+func (m *mockExchange) FormatSymbol(s string) string        { return s }
+func (m *mockExchange) ExtractSymbol(s string) string       { return s }
 
 func (m *mockExchange) FetchTicker(ctx context.Context, symbol string) (*exchanges.Ticker, error) {
 	m.lastMethod = "FetchTicker"
@@ -82,11 +82,11 @@ func (m *mockExchange) FetchAccount(ctx context.Context) (*exchanges.Account, er
 	return &exchanges.Account{}, nil
 }
 
-func (m *fullMockAdapter) GetExchange() string               { return m.exchange }
+func (m *fullMockAdapter) GetExchange() string                 { return m.exchange }
 func (m *fullMockAdapter) GetMarketType() exchanges.MarketType { return m.marketType }
-func (m *fullMockAdapter) FormatSymbol(s string) string      { return s }
-func (m *fullMockAdapter) ExtractSymbol(s string) string     { return s }
-func (m *fullMockAdapter) Close() error                      { return nil }
+func (m *fullMockAdapter) FormatSymbol(s string) string        { return s }
+func (m *fullMockAdapter) ExtractSymbol(s string) string       { return s }
+func (m *fullMockAdapter) Close() error                        { return nil }
 
 // --- Market Data ---
 
@@ -165,8 +165,18 @@ func (m *fullMockAdapter) PlaceOrder(ctx context.Context, params *exchanges.Orde
 	}, nil
 }
 
+func (m *fullMockAdapter) PlaceOrderWS(ctx context.Context, params *exchanges.OrderParams) error {
+	m.lastMethod = "PlaceOrderWS"
+	return nil
+}
+
 func (m *fullMockAdapter) CancelOrder(ctx context.Context, orderID, symbol string) error {
 	m.lastMethod = "CancelOrder"
+	return nil
+}
+
+func (m *fullMockAdapter) CancelOrderWS(ctx context.Context, orderID, symbol string) error {
+	m.lastMethod = "CancelOrderWS"
 	return nil
 }
 
@@ -175,9 +185,14 @@ func (m *fullMockAdapter) CancelAllOrders(ctx context.Context, symbol string) er
 	return nil
 }
 
-func (m *fullMockAdapter) FetchOrder(ctx context.Context, orderID, symbol string) (*exchanges.Order, error) {
-	m.lastMethod = "FetchOrder"
+func (m *fullMockAdapter) FetchOrderByID(ctx context.Context, orderID, symbol string) (*exchanges.Order, error) {
+	m.lastMethod = "FetchOrderByID"
 	return &exchanges.Order{OrderID: orderID, Symbol: symbol}, nil
+}
+
+func (m *fullMockAdapter) FetchOrders(ctx context.Context, symbol string) ([]exchanges.Order, error) {
+	m.lastMethod = "FetchOrders"
+	return nil, nil
 }
 
 func (m *fullMockAdapter) FetchOpenOrders(ctx context.Context, symbol string) ([]exchanges.Order, error) {
@@ -248,6 +263,11 @@ func (m *fullMockAdapter) ModifyOrder(ctx context.Context, orderID, symbol strin
 	}, nil
 }
 
+func (m *fullMockAdapter) ModifyOrderWS(ctx context.Context, orderID, symbol string, params *exchanges.ModifyOrderParams) error {
+	m.lastMethod = "ModifyOrderWS"
+	return nil
+}
+
 // --- SpotExchange ---
 
 func (m *fullMockAdapter) FetchSpotBalances(ctx context.Context) ([]exchanges.SpotBalance, error) {
@@ -267,6 +287,11 @@ func (m *fullMockAdapter) TransferAsset(ctx context.Context, params *exchanges.T
 
 func (m *fullMockAdapter) WatchOrders(ctx context.Context, cb exchanges.OrderUpdateCallback) error {
 	m.lastMethod = "WatchOrders"
+	return nil
+}
+
+func (m *fullMockAdapter) WatchFills(ctx context.Context, cb exchanges.FillCallback) error {
+	m.lastMethod = "WatchFills"
 	return nil
 }
 
@@ -290,7 +315,7 @@ func (m *fullMockAdapter) WatchKlines(ctx context.Context, symbol string, interv
 	return nil
 }
 
-func (m *fullMockAdapter) WatchOrderBook(ctx context.Context, symbol string, cb exchanges.OrderBookCallback) error {
+func (m *fullMockAdapter) WatchOrderBook(ctx context.Context, symbol string, depth int, cb exchanges.OrderBookCallback) error {
 	m.lastMethod = "WatchOrderBook"
 	return nil
 }
@@ -301,6 +326,7 @@ func (m *fullMockAdapter) GetLocalOrderBook(symbol string, depth int) *exchanges
 
 func (m *fullMockAdapter) StopWatchOrderBook(ctx context.Context, symbol string) error { return nil }
 func (m *fullMockAdapter) StopWatchOrders(ctx context.Context) error                   { return nil }
+func (m *fullMockAdapter) StopWatchFills(ctx context.Context) error                    { return nil }
 func (m *fullMockAdapter) StopWatchPositions(ctx context.Context) error                { return nil }
 func (m *fullMockAdapter) StopWatchTicker(ctx context.Context, symbol string) error    { return nil }
 func (m *fullMockAdapter) StopWatchTrades(ctx context.Context, symbol string) error    { return nil }
@@ -357,7 +383,7 @@ func TestDispatchRouting(t *testing.T) {
 		{"cancel", []string{"order-1", "BTC"}, "CancelOrder"},
 		{"cancel-all", []string{"BTC"}, "CancelAllOrders"},
 		{"modify", []string{"order-1", "BTC", "--price", "95000"}, "ModifyOrder"},
-		{"order", []string{"order-1", "BTC"}, "FetchOrder"},
+		{"order", []string{"order-1", "BTC"}, "FetchOrderByID"},
 
 		// Account
 		{"balance", nil, "FetchBalance"},
