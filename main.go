@@ -11,6 +11,7 @@ import (
 	"syscall"
 
 	exchanges "github.com/QuantProcessing/exchanges"
+	"github.com/QuantProcessing/exchanges-tctl/internal/mcpserver"
 	"github.com/joho/godotenv"
 	"go.uber.org/zap"
 )
@@ -80,6 +81,9 @@ Streaming (requires -ws):
   watch-orders                             live order updates
   watch-trades <symbol>                    live trade stream
 
+MCP:
+  mcp serve                                start the stdio MCP server
+
 Aliases:
   t=ticker  ob=orderbook  kl=klines  p=positions  o=orders
   b=balance  acc=account  sb=spot-balances  lev=leverage
@@ -98,6 +102,7 @@ Examples:
   tctl fund-arb BTC 0.01 --leverage 5
   tctl fund-arb BTC 0.01 --close
   tctl fund-arb BTC 0.01 --spot-exchange BINANCE --perp-exchange OKX
+  tctl mcp serve
 `)
 	}
 
@@ -123,6 +128,11 @@ Examples:
 	// One-shot mode
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
+
+	if isMCPServeCommand(args) {
+		runMCPServer(ctx)
+		return
+	}
 
 	cmd := strings.ToLower(args[0])
 	cmdArgs := args[1:]
@@ -162,6 +172,24 @@ Examples:
 
 	if err := dispatch(ctx, adp, exchName, cmd, cmdArgs, *jsonOut); err != nil {
 		fatal(*jsonOut, "%v", err)
+	}
+}
+
+func isMCPServeCommand(args []string) bool {
+	if len(args) < 2 {
+		return false
+	}
+	return strings.EqualFold(args[0], "mcp") && strings.EqualFold(args[1], "serve")
+}
+
+func runMCPServer(ctx context.Context) {
+	server := mcpserver.NewServer(mcpserver.ServerOptions{
+		Name:    "tctl",
+		Version: version,
+	})
+	if err := server.ServeStdio(ctx, os.Stdin, os.Stdout); err != nil {
+		fmt.Fprintf(os.Stderr, "mcp server error: %v\n", err)
+		os.Exit(1)
 	}
 }
 

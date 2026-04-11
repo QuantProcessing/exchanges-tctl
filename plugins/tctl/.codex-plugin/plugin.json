@@ -1,0 +1,15 @@
+{
+  "name": "tctl",
+  "version": "0.1.0",
+  "description": "Repo-local Codex plugin scaffold for the tctl MCP integration.",
+  "keywords": ["tctl", "mcp", "codex", "trading"],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "tctl",
+    "shortDescription": "Request/response tctl tools for analysis and side-effecting execution.",
+    "longDescription": "CLI-wrapper MCP plugin for tctl. It exposes existing request/response commands only, separates read and mutating tools, keeps fund-arb as a standalone composite mutating tool, and leaves watch/streaming deferred in v1.",
+    "developerName": "exchanges-tctl",
+    "category": "Productivity"
+  }
+}

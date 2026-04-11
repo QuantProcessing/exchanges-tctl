@@ -22,7 +22,7 @@ import (
 // createAdapter creates an exchange adapter by name using env vars for credentials.
 func createAdapter(ctx context.Context, name string, marketType exchanges.MarketType, logger *zap.SugaredLogger) (exchanges.Exchange, error) {
 	name = strings.ToUpper(strings.TrimSpace(name))
-	prefix := "EXCHANGES_" + name + "_"
+	prefix := name + "_"
 	env := func(key string) string { return os.Getenv(prefix + key) }
 	quote := exchanges.QuoteCurrency(env("QUOTE_CURRENCY"))
 
@@ -150,7 +150,7 @@ var credentialChecks = map[string]string{
 func configuredExchanges() []string {
 	var result []string
 	for name, key := range credentialChecks {
-		if os.Getenv("EXCHANGES_"+name+"_"+key) != "" {
+		if os.Getenv(name+"_"+key) != "" {
 			result = append(result, name)
 		}
 	}

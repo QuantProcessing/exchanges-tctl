@@ -180,6 +180,90 @@ tctl -m spot spot-balances --json
 - Error as JSON: `{"error":"message"}`
 - stdout = 数据，stderr = 诊断
 
+## MCP 插件
+
+仓库现在包含一个 repo-local Codex plugin scaffold，位于 [`plugins/tctl`](plugins/tctl)，并提供了 stdio MCP server 入口：
+
+```bash
+tctl mcp serve
+```
+
+说明：
+
+- `v1` 只暴露基于现有 `tctl` 命令的 request/response tools。
+- 只读工具和写操作工具都会纳入。
+- `fund-arb` 作为独立的复合工具暴露。
+- `watch-*` / streaming 工作流在 `v1` 中明确延期。
+
+当前 repo-local plugin 会先判断自己是从 repo root 还是从 `plugins/tctl` 启动，再通过 [`plugins/tctl/.mcp.json`](plugins/tctl/.mcp.json) 中的：
+
+```bash
+go run . mcp serve
+```
+
+直接从当前 checkout 启动 server。这样去掉了之前写死的绝对路径，同时仍然不要求预先安装 `tctl` 二进制。
+
+## 凭证配置
+
+`tctl` 通过环境变量读取交易所凭证。变量名直接使用交易所名称，不再使用旧的 `EXCHANGES_` 前缀。
+
+示例：
+
+```bash
+BINANCE_API_KEY=...
+BINANCE_SECRET_KEY=...
+
+HYPERLIQUID_PRIVATE_KEY=...
+HYPERLIQUID_ACCOUNT_ADDR=...
+
+EDGEX_PRIVATE_KEY=...
+EDGEX_ACCOUNT_ID=...
+```
+
+你可以用下面两种方式配置：
+
+1. repo-local `.env`
+
+```bash
+cp .env.example .env
+# 编辑 .env，只填写你实际使用的交易所
+```
+
+2. 通过 `codex mcp add` 的 `--env`
+
+Binance：
+
+```bash
+codex mcp add tctl-binance \
+  --env BINANCE_API_KEY=your_binance_api_key \
+  --env BINANCE_SECRET_KEY=your_binance_secret_key \
+  -- tctl mcp serve
+```
+
+Hyperliquid：
+
+```bash
+codex mcp add tctl-hyperliquid \
+  --env HYPERLIQUID_PRIVATE_KEY=your_hyperliquid_private_key \
+  --env HYPERLIQUID_ACCOUNT_ADDR=your_hyperliquid_account_addr \
+  -- tctl mcp serve
+```
+
+EdgeX：
+
+```bash
+codex mcp add tctl-edgex \
+  --env EDGEX_PRIVATE_KEY=your_edgex_private_key \
+  --env EDGEX_ACCOUNT_ID=your_edgex_account_id \
+  -- tctl mcp serve
+```
+
+说明：
+
+- `codex mcp add` 只负责注册启动命令，不会替你管理私钥或 API 密钥。
+- 直接使用 `--env KEY=value` 可能会把敏感信息留在 shell history 里。对本地开发来说，通常 `.env` 更简单也更安全。
+- 如果你同时配置了多个交易所，调用工具时建议显式传 `-e <EXCHANGE>`，避免让 `tctl` 自动探测。
+
 ## 开发
 
 ```bash
@@ -195,11 +279,11 @@ go build -o tctl .
 通过 `.env` 文件或环境变量配置交易所凭证：
 
 ```bash
-EXCHANGES_BINANCE_API_KEY=xxx
-EXCHANGES_BINANCE_SECRET_KEY=xxx
-EXCHANGES_OKX_API_KEY=xxx
+BINANCE_API_KEY=xxx
+BINANCE_SECRET_KEY=xxx
+OKX_API_KEY=xxx
 # 可选：指定报价币种（各交易所默认值不同，详见 .env.example）
-# EXCHANGES_BINANCE_QUOTE_CURRENCY=USDC
+# BINANCE_QUOTE_CURRENCY=USDC
 ```
 
 从 `github.com/QuantProcessing/exchanges v0.2.13` 开始，上游已经移除了共享的 `OrderMode` 切换。`tctl` 仍保留 `-ws` 和 `mode ws` 作为兼容入口，主要服务 watch 类工作流；常规下单/撤单/改单命令会走适配器默认的主写入路径。

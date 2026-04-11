@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "tctl": {
+      "command": "bash",
+      "args": [
+        "-lc",
+        "set -euo pipefail; if [ -f ./go.mod ] && grep -q '^module github.com/QuantProcessing/exchanges-tctl$' ./go.mod; then repo=.; elif [ -f ../../go.mod ] && grep -q '^module github.com/QuantProcessing/exchanges-tctl$' ../../go.mod; then repo=../..; else echo 'failed to locate exchanges-tctl repo root for tctl MCP plugin' >&2; exit 1; fi; cd \"$repo\" && exec env GOCACHE=/tmp/go-build go run . mcp serve"
+      ]
+    }
+  }
+}

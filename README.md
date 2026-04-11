@@ -180,6 +180,90 @@ tctl -m spot spot-balances --json
 - Error JSON: `{"error":"message"}`
 - stdout = data, stderr = diagnostics
 
+## MCP Plugin
+
+This repository now includes a repo-local Codex plugin scaffold under [`plugins/tctl`](plugins/tctl) and a stdio MCP server entrypoint:
+
+```bash
+tctl mcp serve
+```
+
+Notes:
+
+- `v1` only exposes request/response tools based on existing `tctl` commands.
+- Read and mutating tools are both included.
+- `fund-arb` is exposed as a standalone composite tool.
+- `watch-*` / streaming workflows are intentionally deferred in `v1`.
+
+The repo-local plugin config currently detects whether it was launched from the repo root or from `plugins/tctl`, then runs:
+
+```bash
+go run . mcp serve
+```
+
+from [`plugins/tctl/.mcp.json`](plugins/tctl/.mcp.json). This removes the previously hardcoded absolute repo path while still letting the plugin work directly from the checkout without requiring a preinstalled `tctl` binary.
+
+## Credential Configuration
+
+`tctl` reads exchange credentials from environment variables. Variable names use the exchange name directly, without the old `EXCHANGES_` prefix.
+
+Examples:
+
+```bash
+BINANCE_API_KEY=...
+BINANCE_SECRET_KEY=...
+
+HYPERLIQUID_PRIVATE_KEY=...
+HYPERLIQUID_ACCOUNT_ADDR=...
+
+EDGEX_PRIVATE_KEY=...
+EDGEX_ACCOUNT_ID=...
+```
+
+You can configure credentials in either of these ways:
+
+1. Repo-local `.env`
+
+```bash
+cp .env.example .env
+# edit .env and fill in only the exchanges you use
+```
+
+2. `codex mcp add` with `--env`
+
+Binance:
+
+```bash
+codex mcp add tctl-binance \
+  --env BINANCE_API_KEY=your_binance_api_key \
+  --env BINANCE_SECRET_KEY=your_binance_secret_key \
+  -- tctl mcp serve
+```
+
+Hyperliquid:
+
+```bash
+codex mcp add tctl-hyperliquid \
+  --env HYPERLIQUID_PRIVATE_KEY=your_hyperliquid_private_key \
+  --env HYPERLIQUID_ACCOUNT_ADDR=your_hyperliquid_account_addr \
+  -- tctl mcp serve
+```
+
+EdgeX:
+
+```bash
+codex mcp add tctl-edgex \
+  --env EDGEX_PRIVATE_KEY=your_edgex_private_key \
+  --env EDGEX_ACCOUNT_ID=your_edgex_account_id \
+  -- tctl mcp serve
+```
+
+Notes:
+
+- `codex mcp add` only registers a launch command; it does not manage your secrets for you.
+- Using `--env KEY=value` can expose secrets in shell history. For local development, `.env` is usually safer and simpler.
+- If you configure more than one exchange, pass `-e <EXCHANGE>` in the tool call so `tctl` does not need to auto-detect.
+
 ## Development
 
 ```bash
@@ -195,11 +279,11 @@ go build -o tctl .
 Configure exchange credentials via `.env` file or environment variables:
 
 ```bash
-EXCHANGES_BINANCE_API_KEY=xxx
-EXCHANGES_BINANCE_SECRET_KEY=xxx
-EXCHANGES_OKX_API_KEY=xxx
+BINANCE_API_KEY=xxx
+BINANCE_SECRET_KEY=xxx
+OKX_API_KEY=xxx
 # Optional: specify quote currency (exchange defaults vary; see .env.example)
-# EXCHANGES_BINANCE_QUOTE_CURRENCY=USDC
+# BINANCE_QUOTE_CURRENCY=USDC
 ```
 
 With `github.com/QuantProcessing/exchanges` `v0.2.13+`, order transport is no longer selected through a shared `OrderMode` toggle. `tctl` still accepts `-ws` and `mode ws` for compatibility with watch-oriented workflows, but standard order commands (`buy`, `sell`, `cancel`, `modify`) follow the adapter's primary non-WS write path.
